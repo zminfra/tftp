@@ -190,6 +190,9 @@ func (s *Server) processRequest() error {
 // Shutdown make server stop listening for new requests, allows
 // server to finish outstanding transfers and stops server.
 func (s *Server) Shutdown() {
+	if s.conn == nil {
+		return
+	}
 	s.conn.Close()
 	q := make(chan struct{})
 	s.quit <- q
