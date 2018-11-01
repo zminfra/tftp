@@ -11,15 +11,22 @@ import (
 	"golang.org/x/net/ipv6"
 )
 
+type ServeRequest struct {
+	Filename string
+	Address  *net.UDPAddr
+}
+
+type ReadHandler func(req ServeRequest, rf io.ReaderFrom) error
+type WriteHandler func(req ServeRequest, wt io.WriterTo) error
+
 // NewServer creates TFTP server. It requires two functions to handle
 // read and write requests.
 // In case nil is provided for read or write handler the respective
 // operation is disabled.
-func NewServer(readHandler func(filename string, rf io.ReaderFrom) error,
-	writeHandler func(filename string, wt io.WriterTo) error) *Server {
+func NewServer(read ReadHandler, write WriteHandler) *Server {
 	return &Server{
-		readHandler:  readHandler,
-		writeHandler: writeHandler,
+		readHandler:  read,
+		writeHandler: write,
 		timeout:      defaultTimeout,
 		retries:      defaultRetries,
 	}
@@ -37,8 +44,8 @@ type RequestPacketInfo interface {
 }
 
 type Server struct {
-	readHandler  func(filename string, rf io.ReaderFrom) error
-	writeHandler func(filename string, wt io.WriterTo) error
+	readHandler  ReadHandler
+	writeHandler WriteHandler
 	backoff      backoffFunc
 	conn         *net.UDPConn
 	quit         chan chan struct{}
@@ -234,7 +241,7 @@ func (s *Server) handlePacket(localAddr net.IP, remoteAddr *net.UDPAddr, buffer 
 		s.wg.Add(1)
 		go func() {
 			if s.writeHandler != nil {
-				err := s.writeHandler(filename, wt)
+				err := s.writeHandler(ServeRequest{Filename: filename, Address: remoteAddr}, wt)
 				if err != nil {
 					wt.abort(err)
 				} else {
@@ -271,7 +278,7 @@ func (s *Server) handlePacket(localAddr net.IP, remoteAddr *net.UDPAddr, buffer 
 		s.wg.Add(1)
 		go func() {
 			if s.readHandler != nil {
-				err := s.readHandler(filename, rf)
+				err := s.readHandler(ServeRequest{Filename: filename, Address: remoteAddr}, rf)
 				if err != nil {
 					rf.abort(err)
 				}
